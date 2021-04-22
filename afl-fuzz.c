@@ -232,6 +232,7 @@ static s32 cpu_aff = -1;       	      /* Selected CPU core                */
 #endif /* HAVE_AFFINITY */
 
 static FILE* plot_file;               /* Gnuplot output file              */
+static FILE* distance_file;	      /* Record the intermediate result   */
 
 struct queue_entry {
 
@@ -2111,6 +2112,7 @@ EXP_ST void init_forkserver(char** argv) {
     close(dev_null_fd);
     close(dev_urandom_fd);
     close(fileno(plot_file));
+    close(fileno(distance_file));
 
     /* This should improve performance a bit, since it stops the linker from
        doing extra work post-fork(). */
@@ -2383,6 +2385,7 @@ static u8 run_target(char** argv, u32 timeout) {
       close(out_dir_fd);
       close(dev_urandom_fd);
       close(fileno(plot_file));
+      close(fileno(distance_file));
 
       /* Set sane defaults for ASAN if nothing else specified. */
 
@@ -4872,6 +4875,9 @@ static u32 calculate_score(struct queue_entry* q) {
   /* AFLGO-DEBUGGING */
   // fprintf(stderr, "[Time %llu] q->distance: %4lf, max_distance: %4lf min_distance: %4lf, T: %4.3lf, power_factor: %4.3lf, adjusted perf_score: %4d\n", t, q->distance, max_distance, min_distance, T, power_factor, perf_score);
 
+  fprintf(distance_file, "[Time %llu] q->distance: %4lf, max_distance: %4lf min_distance: %4lf, T: %4.3lf, power_factor: %4.3lf, adjusted perf_score: %4d\n", t, q->distance, max_distance, min_distance, T, power_factor, perf_score);
+  fflush(distance_file);
+
   return perf_score;
 
 }
@@ -7334,6 +7340,13 @@ EXP_ST void setup_dirs_fds(void) {
                      "unique_hangs, max_depth, execs_per_sec\n");
                      /* ignore errors */
 
+  tmp = alloc_printf("%s/distance_file", out_dir);
+  fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL, 0600);
+  if (fd < 0) PFATAL("Unable to create '%s'", tmp);
+  ck_free(tmp);
+
+  distance_file = fdopen(fd, "w");
+  if(!distance_file) PFATAL("fdopen() distance_file failed");
 }
 
 
@@ -8271,6 +8284,7 @@ stop_fuzzing:
   }
 
   fclose(plot_file);
+  fclose(distance_file);
   destroy_queue();
   destroy_extras();
   ck_free(target_path);
